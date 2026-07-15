@@ -1,0 +1,29 @@
+# Defense in depth if this parent directory is ever initialized as one repository.
+*.parquet
+*.csv
+*.npy
+*.npz
+*.pkl
+*.pickle
+*.joblib
+data/
+outputs/
+tree_snapshots/
+search_snapshots/
+ga_checkpoints/
+checkpoints/
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+*.py[cod]
+.matplotlib_cache/
+.DS_Store
+
+# Legacy/local experiments outside the three-repository suite
+/.claude/
+/RL/
+/markov_chain.py
+/monte_carlo_simulation.py
+/parquet_reader.py

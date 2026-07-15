@@ -1,0 +1,16 @@
+[project]
+name = "mcts-feature-selection"
+version = "0.1.0"
+description = "Monte Carlo Tree Search feature selection for time-series regression"
+readme = "README.md"
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    "matplotlib>=3.9,<4",
+    "numpy>=2.0,<3",
+    "pandas>=2.2,<3",
+    "pyarrow>=17,<22",
+    "scikit-learn>=1.5,<2",
+]
+
+[tool.uv]
+package = false

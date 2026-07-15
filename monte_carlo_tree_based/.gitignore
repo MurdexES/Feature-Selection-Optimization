@@ -1,0 +1,35 @@
+# Private input data and derived selections
+data/
+*.parquet
+*.csv
+*.npy
+*.npz
+*.pkl
+*.pickle
+*.joblib
+
+# Generated runtime artifacts
+outputs/
+tree_snapshots/
+checkpoints/
+*.log
+
+# Python / uv / tooling
+.venv/
+__pycache__/
+*.py[cod]
+.python-version
+.matplotlib_cache/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
