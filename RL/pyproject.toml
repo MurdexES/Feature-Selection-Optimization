@@ -1,0 +1,11 @@
+[project]
+name = "esp-maintenance-rl"
+version = "0.1.0"
+description = "Educational RL decision-support simulation for ESP maintenance scheduling."
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+# Lets `tests/` import the project as `src.simulation....` regardless of
+# which directory pytest is invoked from.
+pythonpath = ["."]
+testpaths = ["tests"]

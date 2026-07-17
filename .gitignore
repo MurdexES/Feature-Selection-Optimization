@@ -23,7 +23,4 @@ __pycache__/
 
 # Legacy/local experiments outside the three-repository suite
 /.claude/
-/RL/
-/markov_chain.py
-/monte_carlo_simulation.py
 /parquet_reader.py

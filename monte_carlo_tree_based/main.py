@@ -12,7 +12,7 @@ import pandas as pd
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.model_selection import TimeSeriesSplit, cross_val_score
 
-HERE = Path(__file__).resolve().parent
+HERE = Path(__file__).resolve().parent.parent
 os.environ.setdefault("MPLCONFIGDIR", str(HERE / ".matplotlib_cache"))
 
 try:
@@ -34,13 +34,13 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description="MCTS fixed-size feature selection for masked_data.parquet"
     )
-    parser.add_argument("--data", type=Path, default=HERE / "data" / "masked_data.parquet")
-    parser.add_argument("--iterations", type=int, default=120)
+    parser.add_argument("--data", type=Path, default=HERE / "masked_data.parquet")
+    parser.add_argument("--iterations", type=int, default=200)
     parser.add_argument("--subset-size", type=int, default=6)
     parser.add_argument("--cv-splits", type=int, default=4)
     parser.add_argument("--report-every", type=int, default=0,
                         help="0 prints about 20 updates")
-    parser.add_argument("--snapshot-every", type=int, default=100,
+    parser.add_argument("--snapshot-every", type=int, default=50,
                         help="0 disables periodic PNG snapshots")
     parser.add_argument("--snapshot-dir", type=Path, default=HERE / "outputs" / "tree_snapshots")
     parser.add_argument(
@@ -67,41 +67,41 @@ def parse_args(argv=None):
 
 
 class SubsetEvaluator:
-    """Cached TimeSeriesSplit MAE evaluator with a bounded MCTS reward."""
+    """Cached TimeSeriesSplit R2 evaluator with a bounded MCTS reward."""
 
-    def __init__(self, X, y, cv_splits, model_params, persistence_mae):
+    def __init__(self, X, y, cv_splits, model_params):
         self.X = X
         self.y = y
         self.cv = TimeSeriesSplit(n_splits=cv_splits)
         self.model_params = model_params
-        self.persistence_mae = max(float(persistence_mae), np.finfo(float).eps)
         self.cache = {}
 
-    def mae(self, state):
+    def r2(self, state):
         key = state.get_state()
         if key not in self.cache:
             model = GradientBoostingRegressor(**self.model_params)
-            neg_mae = cross_val_score(
+            r2 = cross_val_score(
                 model,
                 self.X[:, list(key)],
                 self.y,
                 cv=self.cv,
-                scoring="neg_mean_absolute_error",
+                scoring="r2",
             ).mean()
-            self.cache[key] = float(-neg_mae) # is needed to store cache of feature combinations and their MAE score, to optimize search
+            self.cache[key] = float(r2) # is needed to store cache of feature combinations and their R2 score, to optimize search
         return self.cache[key]
 
     def __call__(self, state):
-        # Bounded (0, 1] and monotonic: a smaller MAE gives a larger reward.
-        return self.mae_to_reward(self.mae(state))
+        # Bounded (0, 1] and monotonic: a larger R2 gives a larger reward.
+        return self.r2_to_reward(self.r2(state))
 
-    def mae_to_reward(self, mae):
-        return 1.0 / (1.0 + max(float(mae), 0.0) / self.persistence_mae)
+    def r2_to_reward(self, r2):
+        # R2 lives in (-inf, 1]; this maps it to (0, 1] with R2=1 -> 1, R2=0 -> 0.5.
+        return 1.0 / (2.0 - min(float(r2), 1.0))
 
-    def reward_to_mae(self, reward):
+    def reward_to_r2(self, reward):
         if reward <= 0:
-            return float("inf")
-        return self.persistence_mae * (1.0 / reward - 1.0)
+            return float("-inf")
+        return 2.0 - 1.0 / reward
 
 
 def load_data(path: Path, candidate_indices: Optional[Path]):
@@ -139,8 +139,6 @@ def run(args):
     if not 0 < args.subset_size <= X.shape[1]:
         raise ValueError("subset-size must be between 1 and the candidate feature count")
 
-    cv = TimeSeriesSplit(n_splits=args.cv_splits)
-    persistence_mae = float(np.mean([np.abs(y[val]).mean() for _, val in cv.split(X)]))
     evaluator = SubsetEvaluator(
         X,
         y,
@@ -151,7 +149,6 @@ def run(args):
             max_depth=args.max_depth,
             random_state=args.seed,
         ),
-        persistence_mae,
     )
     initial_state = make_initial_state(names, args.subset_size)
     report_every = args.report_every or max(1, args.iterations // 20)
@@ -164,19 +161,18 @@ def run(args):
     print(f"Data: {args.data} | rows: {X.shape[0]} | candidates: {X.shape[1]}")
     print(f"Subset size: {args.subset_size} | iterations: {args.iterations} | "
           f"TimeSeriesSplit folds: {args.cv_splits}")
-    print(f"Persistence baseline MAE: {persistence_mae:.6f}")
     print(f"Tree snapshots: {'disabled' if not args.snapshot_every else args.snapshot_dir}")
 
     def callback(step, total, node, state, reward, best_state, best_reward):
-        current_mae = evaluator.mae(state)
-        best_mae = evaluator.mae(best_state)
+        current_r2 = evaluator.r2(state)
+        best_r2 = evaluator.r2(best_state)
         if step % report_every == 0 or step == 1 or step == total:
             elapsed = time.time() - started
             eta = elapsed / step * (total - step)
             print(
                 f"[{step:>5}/{total}] {100 * step / total:6.1f}% | "
                 f"elapsed {fmt_duration(elapsed):>7} | ETA {fmt_duration(eta):>7} | "
-                f"MAE now {current_mae:.6f} | best {best_mae:.6f} | "
+                f"R2 now {current_r2:.6f} | best {best_r2:.6f} | "
                 f"depth {len(node.game_state.selected)} | evals {len(evaluator.cache)}",
                 flush=True,
             )
@@ -188,7 +184,7 @@ def run(args):
                 root,
                 step,
                 args.snapshot_dir,
-                evaluator.reward_to_mae,
+                evaluator.reward_to_r2,
                 best_state.get_state(),
                 args.max_snapshot_nodes,
             )
@@ -209,14 +205,14 @@ def run(args):
     local_indices = np.array(result.best_state.get_state(), dtype=int)
     selected_indices = original_indices[local_indices]
     selected_names = names[local_indices]
-    best_mae = evaluator.mae(result.best_state)
+    best_r2 = evaluator.r2(result.best_state)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     np.save(args.output, selected_indices)
 
     print("\n" + "=" * 72)
     print("BEST SUBSET FOUND")
     print("=" * 72)
-    print(f"CV MAE: {best_mae:.6f} (persistence: {persistence_mae:.6f})")
+    print(f"CV R2: {best_r2:.6f}")
     print(f"Original indices: {selected_indices.tolist()}")
     print(f"Feature names: {selected_names.tolist()}")
     print(f"Saved indices -> {args.output}")

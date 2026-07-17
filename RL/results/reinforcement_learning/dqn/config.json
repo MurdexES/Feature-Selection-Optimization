@@ -1,0 +1,13 @@
+{
+  "learning_rate": 0.001,
+  "discount_factor": 0.999,
+  "batch_size": 64,
+  "buffer_capacity": 200000,
+  "min_buffer_size": 5000,
+  "target_sync_every": 1000,
+  "gradient_clip_norm": 10.0,
+  "epsilon_start": 1.0,
+  "epsilon_min": 0.05,
+  "epsilon_decay_episodes": 150,
+  "double_dqn": false
+}

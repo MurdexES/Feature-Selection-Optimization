@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import os
 import textwrap
 from collections import defaultdict
 from heapq import heappop, heappush
 from itertools import count
 from pathlib import Path
+
+# Colab exports its notebook-only inline backend through MPLBACKEND.  That
+# backend is not installed in this project's isolated uv environment, and
+# Matplotlib reads the variable while it is being imported.  Override it
+# before the import because snapshots are always written to files.
+os.environ["MPLBACKEND"] = "Agg"
 
 import matplotlib
 
@@ -49,26 +56,26 @@ def _visible_nodes(root: MCTSNode, max_nodes: int) -> tuple[list[MCTSNode], dict
     return nodes, depth
 
 
-def _node_label(node, root, reward_to_mae, dense):
+def _node_label(node, root, reward_to_r2, dense):
     """Build either a detailed label or a compact label for crowded trees."""
-    mae = reward_to_mae(node.mean_reward) if node.visits else float("nan")
+    r2 = reward_to_r2(node.mean_reward) if node.visits else float("nan")
     if node is root:
-        return f"ROOT\nvisits={node.visits}  est.MAE={mae:.4f}"
+        return f"ROOT\nvisits={node.visits}  est.R2={r2:.4f}"
 
     feature = _short(node.game_state.feature_label(node.move), 20 if dense else 24)
     if dense:
-        return f"+{feature}\nv={node.visits}  MAE={mae:.4f}"
+        return f"+{feature}\nv={node.visits}  R2={r2:.4f}"
 
     labels = [_short(label, 15) for label in node.game_state.selected_labels()]
     subset = "subset: [" + ", ".join(labels) + "]"
-    return f"+ {feature}\n{subset}\nvisits={node.visits}  est.MAE={mae:.4f}"
+    return f"+ {feature}\n{subset}\nvisits={node.visits}  est.R2={r2:.4f}"
 
 
 def save_tree_snapshot(
     root: MCTSNode,
     iteration: int,
     output_dir: Path,
-    reward_to_mae,
+    reward_to_r2,
     best_subset=(),
     max_nodes: int = 180,
 ) -> Path:
@@ -138,7 +145,7 @@ def save_tree_snapshot(
 
     best_key = tuple(sorted(best_subset))
     for node in nodes:
-        label = _node_label(node, root, reward_to_mae, dense)
+        label = _node_label(node, root, reward_to_r2, dense)
         color = "#b71c1c" if node.game_state.get_state() == best_key else "#263238"
         rotation = 58 if dense and node is not root else 0
         ax.annotate(
